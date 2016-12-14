@@ -1,41 +1,37 @@
-import RPi.GPIO as GPIO
-import time
-import os, json
-import ibmiotf.application
-import uuid
+import RPi.GPIO as GPIO                    #Import GPIO library
+import time                                #Import time library
+GPIO.setmode(GPIO.BCM)                     #Set GPIO pin numbering 
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-GPIO.setup(17, GPIO.OUT)
+TRIG = 23                                  #Associate pin 23 to TRIG
+ECHO = 24                                  #Associate pin 24 to ECHO
 
-client = None
+print "Distance measurement in progress"
 
-def myCommandCallback(cmd):
-    if cmd.event == "light":
-        payload = json.loads(cmd.payload)
-        command = payload["command"]
-        print command
-        if command == "on":
-            GPIO.output(17, True)
-        elif command == "off":
-            GPIO.output(17, False)
+GPIO.setup(TRIG,GPIO.OUT)                  #Set pin as GPIO out
+GPIO.setup(ECHO,GPIO.IN)                   #Set pin as GPIO in
 
-try:
-    options = ibmiotf.application.ParseConfigFile("/home/pi/device.cfg")
-    options["deviceId"] = options["id"]
-    options["id"] = "aaa" + options["id"]
-    client = ibmiotf.application.Client(options)
-    client.connect()
-    client.deviceEventCallback = myCommandCallback
-    client.subscribeToDeviceEvents(event="light")
+while True:
 
-    while True:
-        GPIO.wait_for_edge(18, GPIO.FALLING)
-        print "Button Pushed"
-        myData = {'buttonPushed' : True}
-        client.publishEvent("raspberrypi", options["deviceId"], "input", "json", myData)
-        time.sleep(0.2)
+  GPIO.output(TRIG, False)                 #Set TRIG as LOW
+  print "Waitng For Sensor To Settle"
+  time.sleep(2)                            #Delay of 2 seconds
 
-except ibmiotf.ConnectionException  as e:
-    print e
+  GPIO.output(TRIG, True)                  #Set TRIG as HIGH
+  time.sleep(0.00001)                      #Delay of 0.00001 seconds
+  GPIO.output(TRIG, False)                 #Set TRIG as LOW
 
+  while GPIO.input(ECHO)==0:               #Check whether the ECHO is LOW
+    pulse_start = time.time()              #Saves the last known time of LOW pulse
+
+  while GPIO.input(ECHO)==1:               #Check whether the ECHO is HIGH
+    pulse_end = time.time()                #Saves the last known time of HIGH pulse 
+
+  pulse_duration = pulse_end - pulse_start #Get pulse duration to a variable
+
+  distance = pulse_duration * 17150        #Multiply pulse duration by 17150 to get distance
+  distance = round(distance, 2)            #Round to two decimal points
+
+  if distance > 2 and distance < 400:      #Check whether the distance is within range
+    print "Distance:",distance - 0.5,"cm"  #Print distance with 0.5 cm calibration
+  else:
+    print "Out Of Range"                   #display out of range
